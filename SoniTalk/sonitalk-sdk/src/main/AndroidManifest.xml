@@ -3,13 +3,13 @@
     package="at.ac.fhstp.sonitalk">
 
     <permission
-        android:name="at.ac.fhstp.permission_all_ultrasonic_communication"
+        android:name="at.ac.fhstp.permission_all_ultrasonic_communication_unita"
         android:label="@string/permission_l0_label"
         android:description="@string/permission_l0_description"
         android:permissionGroup="SoniTalk"
         android:protectionLevel="dangerous" />
 
-    <uses-permission android:name="at.ac.fhstp.permission_all_ultrasonic_communication"/>
+    <uses-permission android:name="at.ac.fhstp.permission_all_ultrasonic_communication_unita"/>
 
     <application>
         <activity android:name=".PermissionRequestDialogActivity"
