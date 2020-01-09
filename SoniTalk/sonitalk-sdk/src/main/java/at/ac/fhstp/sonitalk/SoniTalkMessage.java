@@ -19,6 +19,10 @@
 
 package at.ac.fhstp.sonitalk;
 
+import java.util.Arrays;
+
+import at.ac.fhstp.sonitalk.utils.EncoderUtils;
+
 /**
  * Wrapper class for messages (received or to be sent).
  * crcIsCorrect, decodingTimeNanosecond are mostly used for debugging purpose and should not be
@@ -44,9 +48,20 @@ public class SoniTalkMessage {
      */
     private short[] rawAudio;
 
+    private SoniTalkHeader soniTalkHeader;
+
     // Add optional spectrum array ?
     /*package-private*/SoniTalkMessage(byte[] message) {
         this.message = message;
+        this.soniTalkHeader = new SoniTalkHeader( EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0));
+        crcIsCorrect = true;
+        decodingTimeNanosecond = 0;
+        rawAudio = null;
+    }
+
+    public SoniTalkMessage(byte[] message, SoniTalkHeader soniTalkHeader) {
+        this.message = message;
+        this.soniTalkHeader = soniTalkHeader;
         crcIsCorrect = true;
         decodingTimeNanosecond = 0;
         rawAudio = null;
@@ -54,6 +69,15 @@ public class SoniTalkMessage {
 
     /*package-private*/SoniTalkMessage(byte[] message, boolean crcIsCorrect, long decodingTimeNanosecond) {
         this.message = message;
+        this.soniTalkHeader = new SoniTalkHeader( EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0));
+        this.crcIsCorrect = crcIsCorrect;
+        this.decodingTimeNanosecond = decodingTimeNanosecond;
+        this.rawAudio = null;
+    }
+
+    public SoniTalkMessage(byte[] message, SoniTalkHeader soniTalkHeader, boolean crcIsCorrect, long decodingTimeNanosecond) {
+        this.message = message;
+        this.soniTalkHeader = soniTalkHeader;
         this.crcIsCorrect = crcIsCorrect;
         this.decodingTimeNanosecond = decodingTimeNanosecond;
         this.rawAudio = null;
@@ -61,6 +85,7 @@ public class SoniTalkMessage {
 
     /*package-private*/SoniTalkMessage(byte[] message, boolean crcIsCorrect, long decodingTimeNanosecond, short[] rawAudio) {
         this.message = message;
+        this.soniTalkHeader = new SoniTalkHeader( EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0),EncoderUtils.intToByteArray(0));
         this.crcIsCorrect = crcIsCorrect;
         this.decodingTimeNanosecond = decodingTimeNanosecond;
         this.rawAudio = rawAudio;
@@ -106,5 +131,13 @@ public class SoniTalkMessage {
      */
     /*package-private*/void setRawAudio(short[] rawAudio) {
         this.rawAudio = rawAudio;
+    }
+
+    public SoniTalkHeader getSoniTalkHeader() {
+        return soniTalkHeader;
+    }
+
+    public void setSoniTalkHeader(SoniTalkHeader soniTalkHeader) {
+        this.soniTalkHeader = soniTalkHeader;
     }
 }

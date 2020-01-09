@@ -19,7 +19,10 @@
 
 package at.ac.fhstp.sonitalk;
 
+import android.content.Context;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Handler;
@@ -28,17 +31,25 @@ import android.util.Log;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import at.ac.fhstp.sonitalk.exceptions.DecoderStateException;
 import at.ac.fhstp.sonitalk.utils.CRC;
 import at.ac.fhstp.sonitalk.utils.CircularArray;
 import at.ac.fhstp.sonitalk.utils.ConfigConstants;
 import at.ac.fhstp.sonitalk.utils.DecoderUtils;
+import at.ac.fhstp.sonitalk.utils.EncoderUtils;
 import at.ac.fhstp.sonitalk.utils.HammingWindow;
 import edu.emory.mathcs.jtransforms.fft.DoubleFFT_1D;
 import marytts.util.math.ComplexArray;
@@ -68,6 +79,8 @@ public class SoniTalkDecoder {
          * @param receivedMessage message detected and received by the SDK.
          */
         void onMessageReceived(SoniTalkMessage receivedMessage);
+
+        void onMessageReceived(SoniTalkMultiMessage receivedMessage);
 
         /**
          * Called when an error and/or exception occur in the SoniTalkDecoder.
@@ -151,11 +164,16 @@ public class SoniTalkDecoder {
     private boolean loopStopped = false;
     private Handler delayhandler = new Handler();
     private ExecutorService threadExecutor = Executors.newSingleThreadExecutor();
+    private ExecutorService threadAnalyzeExecutor = Executors.newSingleThreadExecutor();
+    private Object syncThreadAnalyzeExecutor = new Object();
     private int decoderState = STATE_INITIALIZED;
 
     private long readTimestamp;
 
     private CRC crc;
+
+    private ArrayList<SoniTalkMessage> soniTalkMessageArrayList;
+    private Map<String, TreeMap<String,SoniTalkMessage>> soniTalkMessageReceiveOverviewDictionary = new HashMap<>();
 
     /*package private*/SoniTalkDecoder(SoniTalkContext soniTalkContext, int sampleRate, SoniTalkConfig config) {
         this(soniTalkContext, sampleRate, config, 8, 50, false);
@@ -167,10 +185,12 @@ public class SoniTalkDecoder {
 
     /*package private*/SoniTalkDecoder(SoniTalkContext soniTalkContext, int sampleRate, SoniTalkConfig config, int stepFactor, int frequencyOffsetForSpectrogram, boolean silentMode, int bandPassFilterOrder, double startFactor, double endFactor) {
         this.soniTalkContext = soniTalkContext;
-//TODO: check if f0 is higher than frequency offset.
+
         this.Fs = sampleRate;
         this.config = config;
         this.crc = new CRC();
+
+        this.soniTalkMessageArrayList = new ArrayList<>();
 
         int f0 = config.getFrequencyZero();
         if ((f0*2) > Fs) {
@@ -333,7 +353,18 @@ public class SoniTalkDecoder {
                     //Log.d("HisoryBuffercounter", "Counter " + counter);
                     //Log.d("HisoryBuffersize", "Size " + historyBuffer.size());
                 } else { // At this point the buffer is very close to be full
-                    analyzeHistoryBuffer();
+                    synchronized (syncThreadAnalyzeExecutor) {
+                        if (threadAnalyzeExecutor.isShutdown()) {
+                            Log.d(TAG, "Thread was terminated already");
+                        } else {
+                            threadAnalyzeExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    analyzeHistoryBuffer();
+                                }
+                            });
+                        }
+                    }
                 }
                 counter++; // Octave version put it at the end
             }
@@ -407,10 +438,11 @@ public class SoniTalkDecoder {
             }*/
 
             //audioRecorderBufferSize = audioRecorderBufferSize*10;
+            AudioDeviceInfo audioInputDevice = soniTalkContext.findAudioDevice(AudioManager.GET_DEVICES_INPUTS, AudioDeviceInfo.TYPE_USB_DEVICE);
             audioRecorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
                     Fs, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT, audioRecorderBufferSize);
-
+            audioRecorder.setPreferredDevice(audioInputDevice);
             if (audioRecorder.getState() != AudioRecord.STATE_INITIALIZED) {
                 Log.e(TAG, "Could not open the audio recorder, initialization failed !");
                 return null;
@@ -437,6 +469,7 @@ public class SoniTalkDecoder {
             lastWindow = historyBuffer.getLastWindow(analysisWinLen);
         }
         */
+        //Log.d("SoniTalkDecoder", "analyzeHistoryBuffer");
 
         float analysisHistoryBuffer[];
         synchronized (historyBuffer) {
@@ -710,8 +743,8 @@ public class SoniTalkDecoder {
 
         int lowerCutoffFrequency = frequencies[0]-frequencyOffsetForSpectrogram;
         int upperCutoffFrequency = frequencies[frequencies.length-1]+frequencyOffsetForSpectrogram;
-        int lowerCutoffFrequencyIdx = (int)((float)lowerCutoffFrequency/(float)Fs*(float)winLenForSpectrogramInSamples);// + 1;
-        int upperCutoffFrequencyIdx = (int)((float)upperCutoffFrequency/(float)Fs*(float)winLenForSpectrogramInSamples);// + 1;
+        int lowerCutoffFrequencyIdx = (int)((float)lowerCutoffFrequency/(float)Fs*(float)winLenForSpectrogramInSamples) + 1;
+        int upperCutoffFrequencyIdx = (int)((float)upperCutoffFrequency/(float)Fs*(float)winLenForSpectrogramInSamples) + 1;
 
 
         // Check if the normalization on a column instead on all the whole message really improved the detection.
@@ -795,10 +828,10 @@ public class SoniTalkDecoder {
 
         int parityCheckResult = crc.checkMessageCRC(messageDecodedBySpec/*, ConfigConstants.GENERATOR_POLYNOM*/);
 
-        if (!silentMode && parityCheckResult == 0) {
+        /*if (!silentMode && parityCheckResult == 0) {
             setLoopStopped(true);
-        }
-        notifySpectrumListeners(historyBufferFloatNormalized, parityCheckResult == 0);
+        }*/
+        //notifySpectrumListeners(historyBufferFloatNormalized, parityCheckResult == 0);
 
         // Decode message to UTF8
         String decodedBitSequence = Arrays.toString(messageDecodedBySpec).replace(", ", "").replace("[","").replace("]","");
@@ -806,14 +839,55 @@ public class SoniTalkDecoder {
         final byte[] receivedMessage = DecoderUtils.binaryToBytes(bitSequenceWithoutFillingAndCRC);
 
         final long decodingTimeNanosecond = System.nanoTime()-readTimestamp;
-        //Log.d("Timing", "From read to received message: " + String.valueOf((decodingTimeNanosecond)/1000000) + "ms. CRC: " + String.valueOf(parityCheckResult));
+        final String textReceived = DecoderUtils.byteToUTF8(receivedMessage);
+        if (parityCheckResult == 0) {
+            byte[] numberOfPackets = new byte[1];
+            System.arraycopy(receivedMessage, 2, numberOfPackets, 0, 1);
+            byte[] messageId = new byte[1];
+            byte[] packetId = new byte[1];
+            System.arraycopy(receivedMessage, 0, messageId, 0, 1);
+            System.arraycopy(receivedMessage, 1, packetId, 0, 1);
+            SoniTalkHeader soniTalkHeader = new SoniTalkHeader(messageId[0], packetId[0], numberOfPackets[0]);
+            byte[] receivedMessageBody = new byte[receivedMessage.length - 3];
+            System.arraycopy(receivedMessage, 3, receivedMessageBody, 0, receivedMessage.length - 3);
 
-        SoniTalkMessage message = new SoniTalkMessage(receivedMessage, parityCheckResult == 0, decodingTimeNanosecond);
-        if (returnsRawAudio()) {
-            message.setRawAudio(convertFloatToShort(analysisHistoryBuffer));
+            if ((int) numberOfPackets[0] > 1) {
+                SoniTalkMessage soniTalkMessage = new SoniTalkMessage(receivedMessageBody, soniTalkHeader);
+
+                if (!soniTalkMessageReceiveOverviewDictionary.containsKey(String.valueOf((int) messageId[0]))) {
+                    soniTalkMessageReceiveOverviewDictionary.put(String.valueOf((int) messageId[0]), new TreeMap<String, SoniTalkMessage>());
+                    Map<String, SoniTalkMessage> soniTalkMessageReceiveDictionary = soniTalkMessageReceiveOverviewDictionary.get(String.valueOf((int) messageId[0]));
+                    if (!soniTalkMessageReceiveDictionary.containsKey(String.valueOf((int) packetId[0]))) {
+                        soniTalkMessageReceiveDictionary.put(String.valueOf((int) packetId[0]), soniTalkMessage);
+                    }
+                } else {
+                    Map<String, SoniTalkMessage> soniTalkMessageReceiveDictionary = soniTalkMessageReceiveOverviewDictionary.get(String.valueOf((int) messageId[0]));
+                    if (!soniTalkMessageReceiveDictionary.containsKey(String.valueOf((int) packetId[0]))) {
+                        soniTalkMessageReceiveDictionary.put(String.valueOf((int) packetId[0]), soniTalkMessage);
+                    }
+                    if (soniTalkMessageReceiveDictionary.size() == (int) numberOfPackets[0]) {
+                        ArrayList<SoniTalkMessage> receivedMessages = new ArrayList<>();
+                        Iterator it = soniTalkMessageReceiveDictionary.entrySet().iterator();
+                        while (it.hasNext()) {
+                            Map.Entry pair = (Map.Entry) it.next();
+                            receivedMessages.add((SoniTalkMessage) pair.getValue());
+                        }
+                        soniTalkMessageReceiveOverviewDictionary.remove(String.valueOf((int) messageId[0]));
+
+                        notifyMessageListeners(DecoderUtils.concatenateMessages(receivedMessages));
+                    }
+                }
+            } else {
+                SoniTalkMultiMessage soniTalkMultiMessage = new SoniTalkMultiMessage(receivedMessageBody);
+                notifyMessageListeners(soniTalkMultiMessage);
+            }
+        } else {
+            byte[] receivedMessageBody = new byte[receivedMessage.length - 3];
+            SoniTalkMultiMessage soniTalkMultiMessage = new SoniTalkMultiMessage(receivedMessageBody);
+            soniTalkMultiMessage.setCrcIsCorrect(false);
+            notifyMessageListeners(soniTalkMultiMessage);
+            Log.d("SoniTalkDecoder", "crc incorrect");
         }
-
-        notifyMessageListeners(message);
 
         //Original Bitsequence for the text "Hello Sonitalk" from SoniTalk Encoder 0100100001100001011011000110110001101111001000000101001101101111011011100110100101110100011000010110110001101011000110010001100100011001000110010001110010010100
     }
@@ -867,6 +941,7 @@ public class SoniTalkDecoder {
         for(int i = nRowsNeighborsLeftRight*(-1); i <= nRowsNeighborsLeftRight; i++){
             for(int j = nColsNeighborsLeftRight*(-1); j <= nColsNeighborsLeftRight; j++){
                 if(i!=0 || j!=0){ //[0,0] is done lower
+                    values[valuecounter] = data[col+i][row+i];
                     values[valuecounter] = data[col+j][row+i];
                     valuecounter++;
 
@@ -961,7 +1036,7 @@ public class SoniTalkDecoder {
      * access when you do not need it anymore.
      */
     public void stopReceiving() {
-        //Log.d(TAG, "Stop receiving.");
+        Log.d(TAG, "Stop receiving.");
         setLoopStopped(true);
 
         soniTalkContext.cancelNotificationReceiving();
@@ -970,6 +1045,12 @@ public class SoniTalkDecoder {
         List<Runnable> cancelledRunnables = threadExecutor.shutdownNow();
         if (!cancelledRunnables.isEmpty())
             Log.d(TAG, "Cancelled " + cancelledRunnables.size() + " tasks.");
+
+        synchronized (syncThreadAnalyzeExecutor) {
+            List<Runnable> cancelledAnalyzeRunnables = threadAnalyzeExecutor.shutdownNow();
+            if (!cancelledAnalyzeRunnables.isEmpty())
+                Log.d(TAG, "Cancelled " + cancelledAnalyzeRunnables.size() + " tasks.");
+        }
     }
 
     /**
@@ -1010,6 +1091,12 @@ public class SoniTalkDecoder {
     }
 
     private void notifyMessageListeners(SoniTalkMessage decodedMessage) {
+        for(MessageListener listener: messageListeners) {
+            listener.onMessageReceived(decodedMessage);
+        }
+    }
+
+    private void notifyMessageListeners(SoniTalkMultiMessage decodedMessage) {
         for(MessageListener listener: messageListeners) {
             listener.onMessageReceived(decodedMessage);
         }

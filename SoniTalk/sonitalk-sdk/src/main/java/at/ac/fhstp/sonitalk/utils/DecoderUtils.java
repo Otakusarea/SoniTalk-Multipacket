@@ -23,8 +23,16 @@ import android.util.Log;
 
 //import org.apache.commons.lang3.*;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+
+import at.ac.fhstp.sonitalk.SoniTalkMessage;
+import at.ac.fhstp.sonitalk.SoniTalkMultiMessage;
+
+//import static at.ac.fhstp.sonitalk.utils.ConfigConstants.HEADER_SEPERATOR_BYTE;
 
 /**
  * Provides functions for removing filling characters and the crc-bits and for
@@ -200,5 +208,13 @@ public final class DecoderUtils {
         return Math.sqrt(real*real + (imaginary*imaginary));
     }
 
+
+    public static SoniTalkMultiMessage concatenateMessages(ArrayList<SoniTalkMessage> receivedMessages){
+        byte[] fullMessageBody = null;
+        for(int i = 0; i<receivedMessages.size(); i++){
+            fullMessageBody = ArrayUtils.addAll(fullMessageBody, receivedMessages.get(i).getMessage());
+        }
+        return new SoniTalkMultiMessage(fullMessageBody);
+    }
 
 }

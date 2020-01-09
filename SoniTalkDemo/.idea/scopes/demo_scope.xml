@@ -1,3 +1,0 @@
-<component name="DependencyValidationManager">
-  <scope name="demo_scope" pattern="src[app]:at.ac.fhstp.sonitalk.sonitalkdemo.*||src[app]:xml.*||src[app]:menu.*||src[app]:layout.*||src[app]:values.*||src[app]:values-de.*" />
-</component>

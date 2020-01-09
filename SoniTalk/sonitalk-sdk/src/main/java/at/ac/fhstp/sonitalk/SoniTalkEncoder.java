@@ -19,6 +19,8 @@
 
 package at.ac.fhstp.sonitalk;
 
+import android.util.Log;
+
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.util.Arrays;
@@ -86,6 +88,17 @@ public class SoniTalkEncoder {
         return message;
     }
 
+    public SoniTalkMessage generateMessage(byte[] data, SoniTalkHeader soniTalkHeader) {
+        SoniTalkMessage message = new SoniTalkMessage(data, soniTalkHeader);
+        short[] generatedSignal = encode(message);
+        message.setRawAudio(generatedSignal);
+
+        //setDecoderState(STATE_GENERATED);
+
+        Log.d("SoniTalkEncoder", "generateMessage");
+        return message;
+    }
+
     /**
      * Takes a byte array and encodes it to a bit sequence. Adds CRC bit sequence for error checking.
      * Creates an inversed version of that bit sequence. Creates a short array with signal data depending
@@ -112,6 +125,30 @@ public class SoniTalkEncoder {
             //Log.d("MessageLength","Fits");
         }
         String[] bitStringArrayInverted = createInvertedStringArray(bitStringArray, messageLength/*, numberOfFrequencies, mesLengthDividedNumFreq*/);
+
+        encodedMessage = generateContainerArraysAndFillWithSignalData(bitStringArray, bitStringArrayInverted, mesLengthDividedNumFreq, numberOfFrequencies, doubleInverted, messageLength);
+
+        return encodedMessage;
+    }
+
+    private short[] encode(SoniTalkMessage message){
+        short[] encodedMessage = null;
+        String bitOfText = encoderUtils.getStringOfEncodedBits(message.getMessage(), message.getSoniTalkHeader().getMessageId(), message.getSoniTalkHeader().getPacketId(), message.getSoniTalkHeader().getNumberOfPackets(), config);
+        boolean doubleInverted = true;
+
+        int nMessageBlocks = config.getnMessageBlocks();
+        int numberOfFrequencies = config.getnFrequencies();
+        int maxBytes = nMessageBlocks*(numberOfFrequencies/8) - (ConfigConstants.GENERATOR_POLYNOM.length-1) / 8;
+
+        String[] bitStringArray = createStringArrayWithParityOfBitText(bitOfText, numberOfFrequencies, maxBytes, ConfigConstants.GENERATOR_POLYNOM);
+
+        int messageLength = bitStringArray.length;
+        double mesLengthDividedNumFreq = Math.round(messageLength/numberOfFrequencies);
+        if(mesLengthDividedNumFreq<((float)messageLength/numberOfFrequencies)){
+            mesLengthDividedNumFreq++;
+        }else{
+        }
+        String[] bitStringArrayInverted = createInvertedStringArray(bitStringArray, messageLength);
 
         encodedMessage = generateContainerArraysAndFillWithSignalData(bitStringArray, bitStringArrayInverted, mesLengthDividedNumFreq, numberOfFrequencies, doubleInverted, messageLength);
 
@@ -280,4 +317,5 @@ public class SoniTalkEncoder {
 
         return encodedMessage;
     }
+
 }

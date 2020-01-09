@@ -26,11 +26,14 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.ResultReceiver;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.content.ContextCompat;
+import android.util.Log;
 
 import java.util.EnumSet;
 
@@ -199,6 +202,7 @@ public class SoniTalkContext {
      * @return a sender object to transmit the encoded message of the encoder
      */
     public SoniTalkSender getSender(){
+        Log.d("SoniTalkContext", "getSender");
         return new SoniTalkSender(this);
     }
 
@@ -375,5 +379,17 @@ public class SoniTalkContext {
         private static NotificationManagerCompat getNotificationManager(Context context) {
             return NotificationManagerCompat.from(context.getApplicationContext());
         }
+    }
+
+
+    public AudioDeviceInfo findAudioDevice(int deviceFlag, int deviceType) {
+        AudioManager manager = (AudioManager) appContext.getSystemService(Context.AUDIO_SERVICE);
+        AudioDeviceInfo[] adis = manager.getDevices(deviceFlag);
+        for (AudioDeviceInfo adi : adis) {
+            if (adi.getType() == deviceType) {
+                return adi;
+            }
+        }
+        return null;
     }
 }

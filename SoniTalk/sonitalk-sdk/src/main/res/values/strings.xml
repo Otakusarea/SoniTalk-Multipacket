@@ -18,7 +18,7 @@
   -->
 
 <resources>
-    <string name="app_name">SoniTalk</string>
+    <!--<string name="app_name">SoniTalk</string>-->
     <string name="context_preference_key" translatable="false">at.ac.fhstp.sonitalk.context_preference_key_</string>
     <string name="permission_level_key" translatable="false">PERMISSION_LEVEL</string>
     <string name="bundleRequestCode_key" translatable="false">BUNDLE_REQUEST_CODE_KEY</string>

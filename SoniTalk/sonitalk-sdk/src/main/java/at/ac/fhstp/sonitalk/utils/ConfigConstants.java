@@ -51,4 +51,6 @@ public class ConfigConstants {
 */
     public static final byte[] GENERATOR_POLYNOM = new byte[] { 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1}; //CRC-17-CAN : 0x1685B
     public static final String CONTROL_FILLING_CHARACTER = "00011001";
+    public static final String HEADER_SEPERATOR = "00010111";
+    public static final byte[] HEADER_SEPERATOR_BYTE = new byte[] { 0, 0, 0, 1, 0, 1, 1, 1};
 }

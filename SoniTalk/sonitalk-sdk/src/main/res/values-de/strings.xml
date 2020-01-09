@@ -19,7 +19,7 @@
   -->
 
 <resources>
-    <string name="app_name">SoniTalk</string>
+    <!--<string name="app_name">SoniTalk</string>-->
     <string name="permission_level_question">\"Data-over-sound\" Privatsphäre- einstellung für %s:</string>
     <string name="l2_permission_level_text">Strikt - Bei jeder Kommunikationsanfrage fragen</string>
     <string name="l1_permission_level_text">Mittel - Bis zum nächsten Start der App zulassen</string>

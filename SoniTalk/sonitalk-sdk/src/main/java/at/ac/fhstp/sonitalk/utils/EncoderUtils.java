@@ -19,8 +19,14 @@
 
 package at.ac.fhstp.sonitalk.utils;
 
+import android.util.Log;
+
+import org.apache.commons.lang3.ArrayUtils;
 
 import at.ac.fhstp.sonitalk.SoniTalkConfig;
+import at.ac.fhstp.sonitalk.SoniTalkHeader;
+import at.ac.fhstp.sonitalk.SoniTalkMessage;
+import at.ac.fhstp.sonitalk.SoniTalkMultiMessage;
 
 /**
  * The main part of EncoderUtils is to change the message bytes to bit.
@@ -68,7 +74,6 @@ public class EncoderUtils {
                 outputByte[counter++] = (byte)k;
             }
         }
-        //String readable = DecoderUtils.byteToUTF8(outputByte);
 
         return bitOfText;
     }
@@ -89,6 +94,21 @@ public class EncoderUtils {
         }
     }
 
+    public String getStringOfEncodedBits(byte[] textToSend, byte messageId, byte packetId, byte numberOfPackets, SoniTalkConfig config){
+        byte[] fullMessage = null;
+        fullMessage = ArrayUtils.addAll(fullMessage,messageId);
+        fullMessage = ArrayUtils.addAll(fullMessage,packetId);
+        fullMessage = ArrayUtils.addAll(fullMessage,numberOfPackets);
+        fullMessage = ArrayUtils.addAll(fullMessage,textToSend);
+        String bitOfText = changeToBitString(fullMessage);
+
+        if(isAllowedByteArraySize(textToSend, config)) {
+            return bitOfText;
+        }else{
+            throw new IllegalArgumentException("Entered Message is too long");
+        }
+    }
+
     /**
      * Checks if the byte array does not exceed the number of allowed bytes.
      * @param textToSend byte array to check
@@ -97,6 +117,7 @@ public class EncoderUtils {
      */
     public static boolean isAllowedByteArraySize(byte[] textToSend, SoniTalkConfig config){
         int maxChars =  config.getnMessageBlocks()*(config.getnFrequencies()/8)-2;
+        Log.d("EncoderUtils", "isAllowedByteArraySize "+maxChars);
         if(changeToBitString(textToSend).length()<=(maxChars*8)) {
             return true;
         }else{
@@ -118,6 +139,56 @@ public class EncoderUtils {
             helpString = bitOfText;
         }
         return helpString;
+    }
+
+    public static byte intToByteArray(int a)
+    {
+        byte ret = (byte) a;
+        return ret;
+    }
+
+
+    public static int calculateNumberOfPackets(SoniTalkMultiMessage message, SoniTalkConfig config){
+        int numOfBytes = config.getnMessageBlocks()*(config.getnFrequencies()/8)-2;
+        int fixedHeaderSize = 3; //4 Byte reserved = 1 Byte messageId, 1 Byte packetId, 1 Byte numberOfPackets
+        final byte[] bytes = message.getMessage();
+        byte[] headerBytesPlaceholder = new byte[fixedHeaderSize];
+        byte[] checkSizeByte = ArrayUtils.addAll(bytes, headerBytesPlaceholder);
+        if(EncoderUtils.isAllowedByteArraySize(checkSizeByte, config)){
+            return 1;
+        } else{
+            if(bytes.length%(numOfBytes-fixedHeaderSize)==0){
+                return bytes.length/(numOfBytes-fixedHeaderSize);
+            }else{
+                return bytes.length/(numOfBytes-fixedHeaderSize)+1;
+            }
+        }
+    }
+
+    public static SoniTalkMessage[] splitMultiMessageIntoSoniTalkMessages(SoniTalkMultiMessage message, int numberOfPackets, SoniTalkConfig config){
+        SoniTalkMessage[] soniTalkMessages = new SoniTalkMessage[numberOfPackets];
+        int numOfBytes = config.getnMessageBlocks()*(config.getnFrequencies()/8)-2;
+        int fixedHeaderSize = 3; //4 Byte reserved = 1 Byte messageId, 1 Byte packetId, 1 Byte numberOfPackets
+        int messageId = (int) (255*Math.abs(Math.random()));
+        int packetId = 1;
+        SoniTalkHeader soniTalkHeader;// = new SoniTalkHeader(EncoderUtils.intToByteArray(messageId), EncoderUtils.intToByteArray(packetId), EncoderUtils.intToByteArray(numberOfPackets));
+        for(int i = 0; i<numberOfPackets ;i++){
+            byte[] messageBodyPart;
+            if((i+1)!=numberOfPackets){
+                int messageLength = numOfBytes-fixedHeaderSize;
+                messageBodyPart = new byte[messageLength];
+                System.arraycopy(message.getMessage(), messageLength*i, messageBodyPart,0, messageLength);
+            }else{
+                int restMessageLength = message.getMessage().length-((numOfBytes-fixedHeaderSize)*(numberOfPackets-1));
+                messageBodyPart = new byte[restMessageLength];
+                System.arraycopy(message.getMessage(), (numOfBytes-fixedHeaderSize)*(numberOfPackets-1), messageBodyPart,0, restMessageLength);
+            }
+            soniTalkHeader = new SoniTalkHeader(EncoderUtils.intToByteArray(messageId), EncoderUtils.intToByteArray(packetId), EncoderUtils.intToByteArray(numberOfPackets));
+            soniTalkMessages[i] = new SoniTalkMessage(messageBodyPart, soniTalkHeader);
+            packetId++;
+        }
+
+        return soniTalkMessages;
     }
 
 }

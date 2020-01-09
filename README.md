@@ -7,6 +7,8 @@ The project was pursued by Matthias Zeppelzauer, Alexis Ringot and Florian Taure
 
 The project website of the SoniTalk project with all published results and resources can be found here: [sonitalk.fhstp.ac.at](https://sonitalk.fhstp.ac.at/).
 
+During the master thesis, called UNITA - Ultrasonic Network for IoT Applications, of Florian Taurer, SoniTalk got extended by a multipacket feature. The possibility of splitting longer messages into shorter message packets got implemented.
+
 ## Getting started
 ### Prerequisites
 #### Minimum SDK
